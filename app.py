@@ -2,14 +2,13 @@ from flask import Flask, render_template, redirect, url_for, flash, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_required, login_user, logout_user, current_user
 from sqlalchemy.exc import IntegrityError
-import re
 import os
+import re
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from datetime import datetime
 
-from itsdangerous import URLSafeTimedSerializer
-
 from models import db, User, Room, Booking
-from forms import RegistrationForm, LoginForm, BookingForm
+from forms import RegistrationForm, LoginForm, BookingForm, ResetRequestForm, ResetPasswordForm
 from services import send_email, send_sms
 
 
@@ -19,11 +18,10 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-secret-key")
 
     db_url = os.getenv("DATABASE_URL")
-
     if not db_url:
-        raise RuntimeError("❌ ERROR: DATABASE_URL is missing!")
+        raise RuntimeError("ERROR: DATABASE_URL is missing!")
 
-    # Fix: Render gives "postgres://" or "postgresql://"
+    # Render uses postgres:// but SQLAlchemy needs postgresql+psycopg2://
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
     elif db_url.startswith("postgresql://"):
@@ -34,10 +32,10 @@ def create_app():
 
     db.init_app(app)
 
+    # Create tables
     with app.app_context():
         db.create_all()
 
-    # Login manager
     login_manager = LoginManager()
     login_manager.login_view = 'login'
     login_manager.init_app(app)
@@ -46,26 +44,10 @@ def create_app():
     def load_user(id):
         return User.query.get(int(id))
 
-    # Utility: notify officials
-    def notify_officials(subject, message):
-        officials = User.query.filter_by(role='official').all()
-        for o in officials:
-            try:
-                send_email(app, subject, o.email, message)
-            except Exception as e:
-                print("Email failed:", o.email, e)
-
-            if o.phone:
-                try:
-                    send_sms(app, o.phone, message)
-                except Exception as e:
-                    print("SMS failed:", o.phone, e)
-
+    # Create manager if missing
     with app.app_context():
-        db.create_all()
         create_demo_manager()
 
-    # ROUTES -------------------------------------
 
     @app.route('/')
     def index():
@@ -80,8 +62,9 @@ def create_app():
         form = RegistrationForm()
         if form.validate_on_submit():
 
+            # Only allow Gmail
             if not re.match(r'^[a-zA-Z0-9_.+-]+@gmail\.com$', form.email.data or ''):
-                flash('Only Gmail addresses allowed.', 'danger')
+                flash('Only Gmail addresses are allowed.', 'danger')
                 return render_template('register.html', form=form)
 
             user = User(
@@ -112,54 +95,8 @@ def create_app():
             if user and user.check_password(form.password.data):
                 login_user(user)
                 return redirect(url_for('dashboard'))
-            flash('Incorrect email or password', 'danger')
+            flash("Incorrect email or password.", "danger")
         return render_template('login.html', form=form)
-
-    @app.route('/reset_password', methods=['GET', 'POST'])
-    def reset_request():
-        from forms import ResetRequestForm
-        form = ResetRequestForm()
-
-        if form.validate_on_submit():
-            user = User.query.filter_by(email=form.email.data).first()
-
-            if user:
-                token = user.get_reset_token()
-                reset_link = url_for('reset_token', token=token, _external=True)
-
-                message = (
-                    f"Hello {user.name},\n\n"
-                    f"Click the link below to reset your password:\n{reset_link}\n\n"
-                    f"If you did not request this, ignore this email."
-                )
-
-                send_email(app, "Password Reset Request", user.email, message)
-
-            flash("If the email exists, a reset link was sent.", "info")
-            return redirect(url_for('login'))
-
-        return render_template('reset_request.html', form=form)
-
-  
-    @app.route('/reset_password/<token>', methods=['GET', 'POST'])
-    def reset_token(token):
-        from forms import ResetPasswordForm
-
-        user = User.verify_reset_token(token)
-        if user is None:
-            flash("Invalid or expired token.", "danger")
-            return redirect(url_for('reset_request'))
-
-        form = ResetPasswordForm()
-
-        if form.validate_on_submit():
-            user.set_password(form.password.data)
-            db.session.commit()
-            flash("Password updated! Please log in.", "success")
-            return redirect(url_for('login'))
-
-        return render_template('reset_token.html', form=form)
-
 
     @app.route('/logout')
     def logout():
@@ -170,19 +107,20 @@ def create_app():
     @login_required
     def dashboard():
         if current_user.is_manager():
-            pending = Booking.query.filter_by(status='pending').all()
+            pending = Booking.query.filter_by(status="pending").all()
             return render_template('manager_dashboard.html', pending=pending)
-        else:
-            bookings = Booking.query.filter_by(user_id=current_user.id).all()
-            return render_template('official_dashboard.html', bookings=bookings)
+
+        # officials
+        bookings = Booking.query.filter_by(user_id=current_user.id).all()
+        return render_template('official_dashboard.html', bookings=bookings)
 
     @app.route('/book', methods=['GET', 'POST'])
     @login_required
     def book():
         form = BookingForm()
-
         form.room_id.choices = [(r.id, r.room_name) for r in Room.query.all()]
 
+        # Prefill user data
         if request.method == 'GET':
             form.name.data = current_user.name
             form.email.data = current_user.email
@@ -190,16 +128,16 @@ def create_app():
 
         if form.validate_on_submit():
 
-            start = form.start_time.data
-            end = form.end_time.data
-            if end <= start:
+            # Validate time
+            if form.end_time.data <= form.start_time.data:
                 flash('End time must be after start time', 'danger')
                 return render_template('booking_form.html', form=form)
 
-            existing = Booking.query.filter_by(
+            # Check for overlaps
+            approved = Booking.query.filter_by(
                 room_id=form.room_id.data,
                 date=form.date.data,
-                status='approved'
+                status="approved"
             ).all()
 
             new_booking = Booking(
@@ -218,7 +156,7 @@ def create_app():
                 status='pending'
             )
 
-            for e in existing:
+            for e in approved:
                 if new_booking.overlaps(e):
                     flash("This time slot is already booked!", "danger")
                     return render_template('booking_form.html', form=form)
@@ -226,25 +164,88 @@ def create_app():
             db.session.add(new_booking)
             db.session.commit()
 
+            # Notify manager
             manager = User.query.filter_by(role="manager").first()
             if manager:
-                body = (
+                msg = (
                     f"New Booking Request:\n"
                     f"Requester: {new_booking.requester_name}\n"
                     f"Date: {new_booking.date}\n"
                     f"Time: {new_booking.start_time} - {new_booking.end_time}\n"
                     f"Room: {new_booking.room.room_name}\n"
-                    f"Activity: {new_booking.activity}\n"
+                    f"Activity: {new_booking.activity}"
                 )
-                send_email(app, "New Booking Request", manager.email, body)
+                send_email(app, "New Booking Request", manager.email, msg)
 
             flash("Booking submitted!", "success")
             return redirect(url_for('dashboard'))
 
         return render_template('booking_form.html', form=form)
 
-    return app
+    @app.route('/approve/<int:booking_id>')
+    @login_required
+    def approve_booking(booking_id):
+        if not current_user.is_manager():
+            flash("Unauthorized.", "danger")
+            return redirect(url_for('dashboard'))
 
+        booking = Booking.query.get_or_404(booking_id)
+        booking.status = "approved"
+        db.session.commit()
+
+        flash("Booking approved.", "success")
+        return redirect(url_for('dashboard'))
+
+    @app.route('/reject/<int:booking_id>')
+    @login_required
+    def reject_booking(booking_id):
+        if not current_user.is_manager():
+            flash("Unauthorized.", "danger")
+            return redirect(url_for('dashboard'))
+
+        booking = Booking.query.get_or_404(booking_id)
+        booking.status = "rejected"
+        db.session.commit()
+
+        flash("Booking rejected.", "info")
+        return redirect(url_for('dashboard'))
+
+    @app.route('/reset_request', methods=['GET', 'POST'])
+    def reset_request():
+        form = ResetRequestForm()
+        if form.validate_on_submit():
+            user = User.query.filter_by(email=form.email.data).first()
+            if user:
+                token = user.get_reset_token()
+                reset_url = url_for('reset_token', token=token, _external=True)
+
+                send_email(app,
+                           "Password Reset",
+                           user.email,
+                           f"Click the link to reset your password:\n{reset_url}")
+
+            flash("If your email exists, a reset link has been sent.", "info")
+            return redirect(url_for('login'))
+
+        return render_template('reset_request.html', form=form)
+        
+    @app.route('/reset/<token>', methods=['GET', 'POST'])
+    def reset_token(token):
+        user = User.verify_reset_token(token)
+        if not user:
+            flash("Invalid or expired token.", "danger")
+            return redirect(url_for('reset_request'))
+
+        form = ResetPasswordForm()
+        if form.validate_on_submit():
+            user.set_password(form.password.data)
+            db.session.commit()
+            flash("Password updated! You can now log in.", "success")
+            return redirect(url_for('login'))
+
+        return render_template('reset_token.html', form=form)
+
+    return app
 
 def create_demo_manager():
     if not User.query.filter_by(role="manager").first():
@@ -257,7 +258,6 @@ def create_demo_manager():
         m.set_password("Mnyakeni123")
         db.session.add(m)
         db.session.commit()
-
 
 if __name__ == '__main__':
     app = create_app()
