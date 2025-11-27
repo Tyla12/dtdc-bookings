@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="card shadow">
+      <div class="card-header bg-white">
+        <h5 class="mb-0"><i class="fa-solid fa-calendar-plus me-2 text-primary"></i> New Booking</h5>
+      </div>
+      <div class="card-body">
+        <form method="post">
+          {{ form.hidden_tag() }}
+          <div class="mb-3">
+            <label class="form-label">Full Names</label>
+            {{ form.name(class="form-control", placeholder="Enter your fullnames") }}
+          </div>
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Email</label>
+              {{ form.email(class="form-control", placeholder="Enter your email address") }}
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Contact details </label>
+              {{ form.phone(class="form-control", placeholder="Enter your cell phonenumber") }}
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Unit / Directorate</label>
+            {{ form.unit(class="form-control", placeholder="Enter your Directorate") }}
+          </div>
+
+          <div class="row">
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Date</label>
+              {{ form.date(class="form-control") }}
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">Start time</label>
+              {{ form.start_time(class="form-control") }}
+            </div>
+            <div class="col-md-4 mb-3">
+              <label class="form-label">End time</label>
+              {{ form.end_time(class="form-control") }}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Event / Activity</label>
+            {{ form.activity(class="form-control", placeholder="Enter the event or activity") }}
+          </div>
+
+          <div class="row">
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Expected Participants</label>
+              {{ form.participants(class="form-control", placeholder="Enter the amount of expected participants") }}
+            </div>
+            <div class="col-md-6 mb-3">
+              <label class="form-label">Room</label>
+              {{ form.room_id(class="form-select") }}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Special Requirements</label>
+            {{ form.requirements(class="form-control", rows=3, placeholder="Any special equipment or setup required") }}
+          </div>
+
+          <div class="d-flex gap-2">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary"><i class="fa-solid fa-arrow-left"></i> Back</a>
+            {{ form.submit(class="btn btn-primary") }}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
