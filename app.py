@@ -115,9 +115,6 @@ def create_app():
             flash('Incorrect email or password', 'danger')
         return render_template('login.html', form=form)
 
-    # ------------------------------------------------------
-    # STEP 2 - REQUEST PASSWORD RESET
-    # ------------------------------------------------------
     @app.route('/reset_password', methods=['GET', 'POST'])
     def reset_request():
         from forms import ResetRequestForm
@@ -143,9 +140,7 @@ def create_app():
 
         return render_template('reset_request.html', form=form)
 
-    # ------------------------------------------------------
-    # STEP 3 & 4 - RESET TOKEN + SET NEW PASSWORD
-    # ------------------------------------------------------
+  
     @app.route('/reset_password/<token>', methods=['GET', 'POST'])
     def reset_token(token):
         from forms import ResetPasswordForm
@@ -165,7 +160,6 @@ def create_app():
 
         return render_template('reset_token.html', form=form)
 
-    # ------------------------------------------------------
 
     @app.route('/logout')
     def logout():
