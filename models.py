@@ -2,11 +2,15 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from datetime import datetime
+from itsdangerous import URLSafeTimedSerializer as Serializer
+from flask import current_app
 
 db = SQLAlchemy()
 
+
 class User(UserMixin, db.Model):
     __tablename__ = 'users'
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
@@ -17,6 +21,9 @@ class User(UserMixin, db.Model):
 
     bookings = db.relationship('Booking', backref='requester', lazy='dynamic')
 
+    # -------------------------------
+    # PASSWORD HELPERS
+    # -------------------------------
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
@@ -26,9 +33,29 @@ class User(UserMixin, db.Model):
     def is_manager(self):
         return self.role == 'manager'
 
+    # -------------------------------
+    # RESET PASSWORD TOKEN HELPERS
+    # -------------------------------
+    def get_reset_token(self):
+        """Generate a secure reset token valid for 30 minutes."""
+        s = Serializer(current_app.config['SECRET_KEY'])
+        return s.dumps({'user_id': self.id})
+
+    @staticmethod
+    def verify_reset_token(token, max_age=1800):
+        """Verify the token and return the user if valid."""
+        s = Serializer(current_app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token, max_age=max_age)
+        except:
+            return None
+
+        return User.query.get(data['user_id'])
+
 
 class Room(db.Model):
     __tablename__ = 'rooms'
+
     id = db.Column(db.Integer, primary_key=True)
     room_name = db.Column(db.String(255), nullable=False)
     capacity = db.Column(db.Integer, default=0)
@@ -39,6 +66,7 @@ class Room(db.Model):
 
 class Booking(db.Model):
     __tablename__ = 'bookings'
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
@@ -63,23 +91,3 @@ class Booking(db.Model):
         if self.date != other.date or self.room_id != other.room_id:
             return False
         return not (self.end_time <= other.start_time or self.start_time >= other.end_time)
-
-
-from itsdangerous import URLSafeTimedSerializer
-from flask import current_app
-
-def get_reset_token(self):
-    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-    return s.dumps(self.email)
-
-@staticmethod
-def verify_reset_token(token, expires_sec=3600):
-    s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
-    try:
-        email = s.loads(token, max_age=expires_sec)
-    except Exception:
-        return None
-    return User.query.filter_by(email=email).first()
-
-User.get_reset_token = get_reset_token
-User.verify_reset_token = staticmethod(verify_reset_token)
