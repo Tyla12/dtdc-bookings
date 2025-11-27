@@ -43,7 +43,7 @@
           <div class="modal fade" id="declineModal{{ b.id }}" tabindex="-1">
             <div class="modal-dialog modal-dialog-centered">
               <div class="modal-content">
-                <form method="post" action="{{ url_for('decline_booking', booking_id=b.id) }}">
+                <form method="post" action="{{ url_for('reject_booking', booking_id=b.id) }}">
                   <div class="modal-header">
                     <h5 class="modal-title">Decline booking</h5>
                     <button class="btn-close" data-bs-dismiss="modal"></button>
