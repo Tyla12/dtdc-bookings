@@ -15,9 +15,15 @@ from services import send_email, send_sms
 def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'secret-key'
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL","sqlite:///dtdc.db")
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+    # ------------- IMPORTANT FIX FOR RENDER ----------------
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        raise RuntimeError("❌ ERROR: DATABASE_URL is not set in Render environment!")
+    app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+    # --------------------------------------------------------
+
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     db.init_app(app)
 
@@ -43,9 +49,11 @@ def create_app():
                 except Exception as e:
                     print('SMS notify failed for', o.phone, e)
 
+    # ----------------- CREATE TABLES SAFELY ----------------
     with app.app_context():
         db.create_all()
         create_demo_manager()
+    # -------------------------------------------------------
 
     # STATIC PAGES
     @app.route('/')
@@ -62,7 +70,7 @@ def create_app():
         form = RegistrationForm()
         if form.validate_on_submit():
 
-            # UPDATED: Gmail-only validation
+            # Gmail-only validation
             if not re.match(r'^[a-zA-Z0-9_.+-]+@gmail\.com$', form.email.data or ''):
                 flash('Only Gmail addresses (example@gmail.com) can register.', 'danger')
                 return render_template('register.html', form=form)
@@ -232,16 +240,6 @@ def create_app():
         flash("Booking declined", "info")
         return redirect(url_for('dashboard'))
 
-    @app.route('/approve_booking/<int:booking_id>', methods=['POST'])
-    @login_required
-    def approve_booking(booking_id):
-        return approve(booking_id)
-
-    @app.route('/decline_booking/<int:booking_id>', methods=['POST'])
-    @login_required
-    def decline_booking(booking_id):
-        return decline(booking_id)
-
     # PASSWORD RESET SYSTEM
 
     @app.route('/reset_password', methods=['GET', 'POST'])
@@ -253,7 +251,6 @@ def create_app():
             if user:
                 s = URLSafeTimedSerializer(app.config["SECRET_KEY"])
                 token = s.dumps(email)
-
                 reset_link = url_for("reset_token", token=token, _external=True)
                 print("RESET LINK:", reset_link)
 
@@ -291,7 +288,7 @@ def create_demo_manager():
     if not User.query.filter_by(role="manager").first():
         m = User(
             name="Teacher Centre Manager",
-            email="Stephen.Mnyaks@gmail.com", 
+            email="Stephen.Mnyaks@gmail.com",
             phone="+27 68 086 5988",
             role="manager"
         )
