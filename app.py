@@ -15,15 +15,9 @@ from services import send_email, send_sms
 def create_app():
     app = Flask(__name__)
 
-    # ----------------------------------------
-    # SECRET KEY (Render → Environment variable)
-    # ----------------------------------------
+
     app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-secret-key")
 
-    # ----------------------------------------
-    # DATABASE URL FIX
-    # Convert Render URL → SQLAlchemy Format
-    # ----------------------------------------
     db_url = os.getenv("DATABASE_URL")
 
     if not db_url:
@@ -39,6 +33,11 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     db.init_app(app)
+    
+
+    with app.app_context():
+        db.create_all()
+
 
     # Login manager
     login_manager = LoginManager()
