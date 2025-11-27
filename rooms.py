@@ -4,6 +4,7 @@ from models import db, Room
 app = create_app()
 
 rooms_to_add = [
+    "ROOM 1",
     "ROOM 2",
     "ROOM 3/HALL",
     "ROOM 4",

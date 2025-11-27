@@ -4,6 +4,7 @@ from flask_login import LoginManager, login_required, login_user, logout_user, c
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 import re
+import os
 from itsdangerous import URLSafeTimedSerializer
 
 from models import db, User, Room, Booking
@@ -14,8 +15,9 @@ from services import send_email, send_sms
 def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'secret-key'
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dtdc.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL","sqlite:///dtdc.db")
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 
     db.init_app(app)
 
