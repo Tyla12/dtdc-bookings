@@ -2,14 +2,18 @@ import re
 from wtforms.validators import ValidationError
 
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField, SelectField, IntegerField, TextAreaField, DateField, TimeField
-from wtforms.validators import DataRequired, Email, EqualTo, Length, NumberRange, Optional
+from wtforms import (
+    StringField, PasswordField, SubmitField, SelectField,
+    IntegerField, TextAreaField, DateField, TimeField
+)
+from wtforms.validators import (
+    DataRequired, Email, EqualTo, Length, NumberRange, Optional
+)
 
 def gmail_email_check(form, field):
     pattern = r'^[a-zA-Z0-9_.+-]+@gmail\.com$'
     if not re.match(pattern, field.data or ''):
         raise ValidationError('Only Gmail addresses (example@gmail.com) are allowed.')
-
 
 class RegistrationForm(FlaskForm):
     name = StringField('Full name', validators=[DataRequired(), Length(min=2, max=120)])
@@ -38,15 +42,15 @@ class BookingForm(FlaskForm):
     requirements = TextAreaField('Special Requirements', validators=[Optional(), Length(max=500)])
     submit = SubmitField('Submit Booking')
 
-
-from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField
-from wtforms.validators import DataRequired
-
-class RequestResetForm(FlaskForm):
-    email = StringField('Email', validators=[DataRequired()])
+class ResetRequestForm(FlaskForm):
+    email = StringField('Email', validators=[DataRequired(), Email()])
     submit = SubmitField('Request Password Reset')
 
+
 class ResetPasswordForm(FlaskForm):
-    password = PasswordField('New Password', validators=[DataRequired()])
+    password = PasswordField('New Password', validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField(
+        'Confirm Password',
+        validators=[DataRequired(), EqualTo('password')]
+    )
     submit = SubmitField('Reset Password')
