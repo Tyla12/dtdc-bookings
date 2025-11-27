@@ -4,8 +4,9 @@ from flask_login import LoginManager, login_required, login_user, logout_user, c
 from sqlalchemy.exc import IntegrityError
 import re
 import os
-from itsdangerous import URLSafeTimedSerializer
 from datetime import datetime
+
+from itsdangerous import URLSafeTimedSerializer
 
 from models import db, User, Room, Booking
 from forms import RegistrationForm, LoginForm, BookingForm
@@ -14,7 +15,6 @@ from services import send_email, send_sms
 
 def create_app():
     app = Flask(__name__)
-
 
     app.config['SECRET_KEY'] = os.getenv("SECRET_KEY", "dev-secret-key")
 
@@ -33,11 +33,9 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     db.init_app(app)
-    
 
     with app.app_context():
         db.create_all()
-
 
     # Login manager
     login_manager = LoginManager()
@@ -48,7 +46,7 @@ def create_app():
     def load_user(id):
         return User.query.get(int(id))
 
-    # Utility
+    # Utility: notify officials
     def notify_officials(subject, message):
         officials = User.query.filter_by(role='official').all()
         for o in officials:
@@ -63,7 +61,6 @@ def create_app():
                 except Exception as e:
                     print("SMS failed:", o.phone, e)
 
-    # Create initial tables
     with app.app_context():
         db.create_all()
         create_demo_manager()
@@ -117,6 +114,58 @@ def create_app():
                 return redirect(url_for('dashboard'))
             flash('Incorrect email or password', 'danger')
         return render_template('login.html', form=form)
+
+    # ------------------------------------------------------
+    # STEP 2 - REQUEST PASSWORD RESET
+    # ------------------------------------------------------
+    @app.route('/reset_password', methods=['GET', 'POST'])
+    def reset_request():
+        from forms import ResetRequestForm
+        form = ResetRequestForm()
+
+        if form.validate_on_submit():
+            user = User.query.filter_by(email=form.email.data).first()
+
+            if user:
+                token = user.get_reset_token()
+                reset_link = url_for('reset_token', token=token, _external=True)
+
+                message = (
+                    f"Hello {user.name},\n\n"
+                    f"Click the link below to reset your password:\n{reset_link}\n\n"
+                    f"If you did not request this, ignore this email."
+                )
+
+                send_email(app, "Password Reset Request", user.email, message)
+
+            flash("If the email exists, a reset link was sent.", "info")
+            return redirect(url_for('login'))
+
+        return render_template('reset_request.html', form=form)
+
+    # ------------------------------------------------------
+    # STEP 3 & 4 - RESET TOKEN + SET NEW PASSWORD
+    # ------------------------------------------------------
+    @app.route('/reset_password/<token>', methods=['GET', 'POST'])
+    def reset_token(token):
+        from forms import ResetPasswordForm
+
+        user = User.verify_reset_token(token)
+        if user is None:
+            flash("Invalid or expired token.", "danger")
+            return redirect(url_for('reset_request'))
+
+        form = ResetPasswordForm()
+
+        if form.validate_on_submit():
+            user.set_password(form.password.data)
+            db.session.commit()
+            flash("Password updated! Please log in.", "success")
+            return redirect(url_for('login'))
+
+        return render_template('reset_token.html', form=form)
+
+    # ------------------------------------------------------
 
     @app.route('/logout')
     def logout():
