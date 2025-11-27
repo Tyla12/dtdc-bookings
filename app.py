@@ -21,7 +21,7 @@ def create_app():
     if not db_url:
         raise RuntimeError("ERROR: DATABASE_URL is missing!")
 
-    # Render uses postgres:// but SQLAlchemy needs postgresql+psycopg2://
+    # Fix Render DB URL
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql+psycopg2://", 1)
     elif db_url.startswith("postgresql://"):
@@ -44,10 +44,11 @@ def create_app():
     def load_user(id):
         return User.query.get(int(id))
 
-    # Create manager if missing
+    # Ensure manager exists
     with app.app_context():
         create_demo_manager()
 
+    # --------------------- ROUTES ----------------------
 
     @app.route('/')
     def index():
@@ -110,7 +111,6 @@ def create_app():
             pending = Booking.query.filter_by(status="pending").all()
             return render_template('manager_dashboard.html', pending=pending)
 
-        # officials
         bookings = Booking.query.filter_by(user_id=current_user.id).all()
         return render_template('official_dashboard.html', bookings=bookings)
 
@@ -120,7 +120,6 @@ def create_app():
         form = BookingForm()
         form.room_id.choices = [(r.id, r.room_name) for r in Room.query.all()]
 
-        # Prefill user data
         if request.method == 'GET':
             form.name.data = current_user.name
             form.email.data = current_user.email
@@ -128,12 +127,10 @@ def create_app():
 
         if form.validate_on_submit():
 
-            # Validate time
             if form.end_time.data <= form.start_time.data:
                 flash('End time must be after start time', 'danger')
                 return render_template('booking_form.html', form=form)
 
-            # Check for overlaps
             approved = Booking.query.filter_by(
                 room_id=form.room_id.data,
                 date=form.date.data,
@@ -182,7 +179,9 @@ def create_app():
 
         return render_template('booking_form.html', form=form)
 
-    @app.route('/approve/<int:booking_id>')
+    # -------------------- FIXED ROUTES ----------------------
+
+    @app.route('/approve/<int:booking_id>', methods=['POST'])
     @login_required
     def approve_booking(booking_id):
         if not current_user.is_manager():
@@ -196,7 +195,7 @@ def create_app():
         flash("Booking approved.", "success")
         return redirect(url_for('dashboard'))
 
-    @app.route('/reject/<int:booking_id>')
+    @app.route('/reject/<int:booking_id>', methods=['POST'])
     @login_required
     def reject_booking(booking_id):
         if not current_user.is_manager():
@@ -209,6 +208,8 @@ def create_app():
 
         flash("Booking rejected.", "info")
         return redirect(url_for('dashboard'))
+
+    # -------------------- PASSWORD RESET ----------------------
 
     @app.route('/reset_request', methods=['GET', 'POST'])
     def reset_request():
@@ -228,7 +229,7 @@ def create_app():
             return redirect(url_for('login'))
 
         return render_template('reset_request.html', form=form)
-        
+
     @app.route('/reset/<token>', methods=['GET', 'POST'])
     def reset_token(token):
         user = User.verify_reset_token(token)
@@ -247,6 +248,7 @@ def create_app():
 
     return app
 
+
 def create_demo_manager():
     if not User.query.filter_by(role="manager").first():
         m = User(
@@ -258,6 +260,7 @@ def create_demo_manager():
         m.set_password("Mnyakeni123")
         db.session.add(m)
         db.session.commit()
+
 
 if __name__ == '__main__':
     app = create_app()
