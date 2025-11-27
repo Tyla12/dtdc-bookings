@@ -29,8 +29,20 @@
                 {% endif %}
               </td>
               <td>
-                {% if b.status == 'declined' and b.reason %}
-                  <i class="fa-solid fa-info-circle" title="Reason: {{ b.reason }}"></i>
+                {% if current_user.role == 'admin' %}
+                  <!-- Approve button -->
+                  <form action="{{ url_for('approve_booking', booking_id=b.id) }}" method="POST" style="display:inline;">
+                    <button class="btn btn-success btn-sm" type="submit">Approve</button>
+                  </form>
+
+                  <!-- Reject button -->
+                  <form action="{{ url_for('reject_booking', booking_id=b.id) }}" method="POST" style="display:inline;">
+                    <button class="btn btn-danger btn-sm" type="submit">Reject</button>
+                  </form>
+                {% else %}
+                  {% if b.status == 'declined' and b.reason %}
+                    <i class="fa-solid fa-info-circle" title="Reason: {{ b.reason }}"></i>
+                  {% endif %}
                 {% endif %}
               </td>
             </tr>
