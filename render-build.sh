@@ -1,12 +1,18 @@
 #!/bin/bash
-set -e
+set -e  # Stop immediately if any command fails
 
-echo "Installing system dependencies for psycopg2..."
-sudo apt-get update
-sudo apt-get install -y libpq-dev python3-dev build-essential
+echo "-------------------------------"
+echo "Starting build on Render..."
+echo "-------------------------------"
 
-echo "Installing Python dependencies..."
+# Upgrade pip first
+echo "Upgrading pip..."
 pip install --upgrade pip
+
+# Install all Python dependencies
+echo "Installing Python dependencies from requirements.txt..."
 pip install -r requirements.txt
 
-echo "Build complete!"
+echo "-------------------------------"
+echo "Build completed successfully!"
+echo "-------------------------------"
